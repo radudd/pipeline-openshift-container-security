@@ -1,0 +1,132 @@
+#!groovy
+podTemplate(
+  label: "buildah-signer",
+  cloud: "openshift",
+  inheritFrom: "maven",
+  podRetention: always(),
+  containers: [
+    containerTemplate(
+      name: "jnlp",
+      image: "quay.apps.rd.bdmsky.net/radu/jenkins-agent:latest",
+      resourceRequestMemory: "1Gi",
+      resourceLimitMemory: "2Gi",
+      resourceRequestCpu: "1",
+      resourceLimitCpu: "2"
+    )
+  ]
+) {
+
+  node('buildah-signer') {
+    def mvnCmd = "mvn"
+    def gpgCmd = "gpg"
+    def buidahCmd = "buildah --storage-driver vfs"
+
+    def appName = "hello-world"
+    def projectName = "quarkus-hello-world"
+    def appDirName = "app/hello-world"
+
+    def containerRegistry = "quay.apps.rd.bdmsky.net"
+    def containerRegistryRepository = "quarkus-hello-world"
+
+    def gpgSecret = credentials("gpg-secret")
+    def gpgTrust = credentials("gpg-trust")
+    def gpgId = "radu@example.com"
+
+    stage("Import GPG Keys") {
+        echo "Importing GPG Keys"
+        sh "${gpgCmd} --batch --import $gpgSecret"
+        sh "${gpgCmd} --import-ownertrust $gpgTrust"
+    }
+
+    // Checkout Source Code.
+    stage('Checkout Source') {
+      checkout scm
+    }
+
+    // Build the Tasks Service
+    dir("${appDirName}") {
+      // The following variables need to be defined at the top level
+      // and not inside the scope of a stage - otherwise they would not
+      // be accessible from other stages.
+      // Extract version from the pom.xml
+      def version = getVersionFromPom("pom.xml")
+      // Set the tag for the development image: version + build number
+      def tag  = "${version}-" + currentBuild.number
+      // Set image tag
+      def imageTag = "${containerRegistry}/${containerRegistryRepository}:${tag}"
+
+      // Using Maven build this file
+      stage('Build jar') {
+            echo "Building version ${tag}"
+            // Execute Maven Build
+            sh "${mvnCmd} clean package -DskipTests"
+      }
+
+      stage('Running tests') {
+            echo "Running Unit Tests"
+            // Execute Unit Tests
+            sh "${mvnCmd} test" 
+      }
+      
+      /* 
+      // Publish the built war file to Nexus
+      stage('Publish to Nexus') {
+        echo "Publish to Nexus"
+        // Publish to Nexus
+        sh "${mvnCmd} deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::${nexusUrl}/repository/releases"
+      }
+      */
+
+      // Build the OpenShift Image in OpenShift and tag it.
+      stage('Build and Tag Application Image') {
+        echo "Building and pushing image to ${containerRegistry}"
+        sh "${buildahCmd} bud --isolation chroot -t ${imageTag} -f Dockerfile --sign-by ${gpgId} ." 
+      }
+
+      stage('Push Application Image') {
+        # buildah requires a slight modification to the push secret provided by the service
+        # account in order to use it for pushing the image
+        sh "cp /var/run/secrets/openshift.io/push/.dockercfg /tmp"
+        sh "(echo \"{ \"auths\": \" ; cat /var/run/secrets/openshift.io/push/.dockercfg ; echo \"}\") > /tmp/.dockercfg"
+        sh "${buildahCmd} push --tls-verify=false --authfile /tmp/.dockercfg ${imageTag}"
+      }
+
+      stage('Push image signature to S3 bucket') {
+        sh "cp /var/run/secrets/openshift.io/push/.dockercfg /tmp"
+        sh "(echo \"{ \"auths\": \" ; cat /var/run/secrets/openshift.io/push/.dockercfg ; echo \"}\") > /tmp/.dockercfg"
+        sh "${buildahCmd} push --tls-verify=false --authfile /tmp/.dockercfg ${imageTag}"
+      }
+
+        /*
+      // Deploy the built image to the Development Environment.
+      stage('Deploy to Dev') {
+        echo "Deploying container image"
+        openshift.withCluster() {
+            openshift.withProject("${devProject}") {
+                openshift.set("image", "dc/${appName}", "${appName}=${ocpDockerRegistry}/${devProject}/${appName}:${devTag}")
+                openshift.set("env", "dc/${appName}", "VERSION='${devTag} (tasks-dev)'")
+                def dcDev = openshift.selector("dc","${appName}")
+                dcDev.rollout().latest()
+                def rcDevVersion = dcDev.object().status.latestVersion
+                def rcDev = openshift.selector("rc","${appName}-${rcDevVersion}").object()
+                echo "Waiting for DEV app to be ready"
+                while (rcDev.status.readyReplicas != rcDev.spec.replicas) {
+                    sleep 10
+                    rcDev = openshift.selector("rc", "${appName}-${rcDevVersion}").object()
+                }
+
+          }
+        }
+      }
+      */
+    }
+  }
+}
+
+// Convenience Functions to read version from the pom.xml
+// Do not change anything below this line.
+// --------------------------------------------------------
+def getVersionFromPom(pom) {
+  def matcher = readFile(pom) =~ '<version>(.+)</version>'
+  matcher ? matcher[0][1] : null
+}

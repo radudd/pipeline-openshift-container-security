@@ -1,0 +1,19 @@
+apiVersion: redhatcop.redhat.io/v1alpha1
+kind: QuayEcosystem
+metadata:
+  name: rb
+  namespace: quay-old
+spec:
+  clair:
+    enabled: true
+    imagePullSecretName: redhat-pull-secret
+  quay:
+    keepConfigDeployment: true
+    externalAccess:
+      tls:
+        termination: edge
+      hostname: quay.apps.rd.bdmsky.net
+    superuserCredentialsSecretName: quay-admin
+    deploymentStrategy: Recreate
+    imagePullSecretName: redhat-pull-secret
+    skipSetup: false
