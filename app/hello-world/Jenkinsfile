@@ -7,19 +7,22 @@ podTemplate(
   containers: [
     containerTemplate(
       name: "jnlp",
-      image: "quay.apps.rd.bdmsky.net/radu/jenkins-agent:latest",
-      resourceRequestMemory: "1Gi",
-      resourceLimitMemory: "2Gi",
-      resourceRequestCpu: "1",
-      resourceLimitCpu: "2"
+      image: "quay.apps.rd.bdmsky.net/development/jenkins-agent:rhel8-root",
+      resourceRequestMemory: "512Mi",
+      resourceLimitMemory: "1Gi",
+      resourceRequestCpu: "0.3",
+      resourceLimitCpu: "2",
+      privileged: true
     )
   ]
 ) {
 
   node('buildah-signer') {
-    def mvnCmd = "mvn"
+    withCredentials([file(credentialsId: 'gpg-secret', variable: 'GPG_SECRET'), file(credentialsId: 'gpg-trust', variable: 'GPG_TRUST'), string(credentialsId: 'quay-username', variable: 'QUAY_USERNAME'), string(credentialsId: 'quay-password', variable: 'QUAY_PASSWORD')]) {
+      
+    def mvnCmd = "./mvnw"
     def gpgCmd = "gpg"
-    def buidahCmd = "buildah --storage-driver vfs"
+    def buildahCmd = "buildah --storage-driver vfs"
 
     def appName = "hello-world"
     def projectName = "quarkus-hello-world"
@@ -28,10 +31,6 @@ podTemplate(
     // S3 credentials for signstore
     def AWS_ACCESS_KEY_ID = credentials("s3-accesskey")
     def AWS_SECRET_ACCESS_KEY = credentials("s3-secretkey")
-
-
-    def gpgSecret = credentials("gpg-secret")
-    def gpgTrust = credentials("gpg-trust")
 
     // Should be parametrized
     def gpgName = "radudd"
@@ -42,9 +41,9 @@ podTemplate(
     def s3bucket = "signstore"
 
     stage("Import GPG Keys") {
-        echo "Importing GPG Keys"
-        sh "${gpgCmd} --batch --import $gpgSecret"
-        sh "${gpgCmd} --import-ownertrust $gpgTrust"
+      echo "Importing GPG Keys"
+      
+      sh "${gpgCmd} --batch --import ${GPG_SECRET}"
     }
 
     // Checkout Source Code.
@@ -69,16 +68,16 @@ podTemplate(
             echo "Building version ${tag}"
             // Execute Maven Build
             sh "${mvnCmd} clean package -DskipTests"
+            sh "buildah version"
       }
-
+      /* 
       stage('Running tests') {
             echo "Running Unit Tests"
             // Execute Unit Tests
             sh "${mvnCmd} test" 
       }
       
-      /* 
-      // Publish the built war file to Nexus
+      // Publish file to Nexus
       stage('Publish to Nexus') {
         echo "Publish to Nexus"
         // Publish to Nexus
@@ -89,14 +88,13 @@ podTemplate(
       // Build the OpenShift Image in OpenShift and tag it.
       stage('Build and Tag Application Image') {
         echo "Building image"
-        sh "${buildahCmd} bud --isolation chroot -t ${imageTag} -f Dockerfile --sign-by ${gpgId} ." 
+        sh "${buildahCmd} bud --isolation chroot -t ${imageTag} -f Dockerfile ." 
       }
 
       stage('Push Application Image') {
         echo "Push image to ${containerRegistry}"
-        sh "cp /var/run/secrets/openshift.io/push/.dockercfg /tmp"
-        sh "(echo \"{ \"auths\": \" ; cat /var/run/secrets/openshift.io/push/.dockercfg ; echo \"}\") > /tmp/.dockercfg"
-        sh "${buildahCmd} push --tls-verify=false --authfile /tmp/.dockercfg ${imageTag}"
+        sh "${buildahCmd} login --username=${QUAY_USERNAME} --password=${QUAY_PASSWORD}"
+        sh "${buildahCmd} push --tls-verify=false --authfile /tmp/.dockercfg --sign-by ${gpgId} ${imageTag}"
       }
 
       stage('Push image signature to S3 bucket') {
@@ -126,6 +124,7 @@ podTemplate(
         }
       }
       */
+    }
     }
   }
 }
