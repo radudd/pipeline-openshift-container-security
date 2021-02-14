@@ -1,0 +1,11 @@
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: signstore
+  namespace: jenkins
+spec:
+  ObjectBucketName: ''
+  additionalConfig:
+    bucketclass: noobaa-default-bucket-class
+  bucketName: 'signstore'
+  storageClassName: noobaa.noobaa.io

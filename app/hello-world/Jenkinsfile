@@ -25,12 +25,21 @@ podTemplate(
     def projectName = "quarkus-hello-world"
     def appDirName = "app/hello-world"
 
-    def containerRegistry = "quay.apps.rd.bdmsky.net"
-    def containerRegistryRepository = "quarkus-hello-world"
+    // S3 credentials for signstore
+    def AWS_ACCESS_KEY_ID = credentials("s3-accesskey")
+    def AWS_SECRET_ACCESS_KEY = credentials("s3-secretkey")
+    
 
     def gpgSecret = credentials("gpg-secret")
     def gpgTrust = credentials("gpg-trust")
+
+    // Should be parametrized
+    def gpgName = "radudd"
     def gpgId = "radu@example.com"
+    def containerRegistry = "quay.apps.rd.bdmsky.net"
+    def containerRegistryRepository = "quarkus-hello-world"
+    def s3endpint = "s3.noobaa.svc"
+    def s3bucket = "signstore"
 
     stage("Import GPG Keys") {
         echo "Importing GPG Keys"
@@ -79,11 +88,12 @@ podTemplate(
 
       // Build the OpenShift Image in OpenShift and tag it.
       stage('Build and Tag Application Image') {
-        echo "Building and pushing image to ${containerRegistry}"
+        echo "Building image"
         sh "${buildahCmd} bud --isolation chroot -t ${imageTag} -f Dockerfile --sign-by ${gpgId} ." 
       }
 
       stage('Push Application Image') {
+        echo "Push image to ${containerRegistry}"
         # buildah requires a slight modification to the push secret provided by the service
         # account in order to use it for pushing the image
         sh "cp /var/run/secrets/openshift.io/push/.dockercfg /tmp"
@@ -92,9 +102,8 @@ podTemplate(
       }
 
       stage('Push image signature to S3 bucket') {
-        sh "cp /var/run/secrets/openshift.io/push/.dockercfg /tmp"
-        sh "(echo \"{ \"auths\": \" ; cat /var/run/secrets/openshift.io/push/.dockercfg ; echo \"}\") > /tmp/.dockercfg"
-        sh "${buildahCmd} push --tls-verify=false --authfile /tmp/.dockercfg ${imageTag}"
+        echo "Syncing S3 bucket with the signatures"
+        sh "s3cmd sync /var/lib/containers/sigstore/ s3://signstore/"
       }
 
         /*
