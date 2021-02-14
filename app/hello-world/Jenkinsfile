@@ -28,7 +28,7 @@ podTemplate(
     // S3 credentials for signstore
     def AWS_ACCESS_KEY_ID = credentials("s3-accesskey")
     def AWS_SECRET_ACCESS_KEY = credentials("s3-secretkey")
-    
+
 
     def gpgSecret = credentials("gpg-secret")
     def gpgTrust = credentials("gpg-trust")
@@ -94,8 +94,6 @@ podTemplate(
 
       stage('Push Application Image') {
         echo "Push image to ${containerRegistry}"
-        # buildah requires a slight modification to the push secret provided by the service
-        # account in order to use it for pushing the image
         sh "cp /var/run/secrets/openshift.io/push/.dockercfg /tmp"
         sh "(echo \"{ \"auths\": \" ; cat /var/run/secrets/openshift.io/push/.dockercfg ; echo \"}\") > /tmp/.dockercfg"
         sh "${buildahCmd} push --tls-verify=false --authfile /tmp/.dockercfg ${imageTag}"
