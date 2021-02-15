@@ -215,7 +215,7 @@ oc secrets link jenkins development-rhel-pull-secret
 Let's configure signature store location. When the images will be signed they will store the signature at the path configured here.
 
 ```
-cat <<EOF > /etc/containers/registries.d/quay.apps.rd.bdmsky.yaml
+cat <<EOF > /etc/containers/registries.d/quay.apps.rd.bdmsky.net.yaml
 docker:
   quay.apps.rd.bdmsky.net:
     sigstore: file:///var/www/signatures/sigstore
