@@ -93,8 +93,8 @@ podTemplate(
 
       stage('Push Application Image') {
         echo "Push image to ${containerRegistry}"
-        sh "${buildahCmd} login --username=${QUAY_USERNAME} --password=${QUAY_PASSWORD}"
-        sh "${buildahCmd} push --tls-verify=false --authfile /tmp/.dockercfg --sign-by ${gpgId} ${imageTag}"
+        sh "podman login --username=${QUAY_USERNAME} --password=${QUAY_PASSWORD}"
+        sh "podman push --sign-by ${gpgId} ${imageTag}"
       }
 
       stage('Push image signature to S3 bucket') {
