@@ -76,13 +76,6 @@ podTemplate(
             // Execute Unit Tests
             sh "${mvnCmd} test" 
       }
-      
-      // Publish file to Nexus
-      stage('Publish to Nexus') {
-        echo "Publish to Nexus"
-        // Publish to Nexus
-        sh "${mvnCmd} deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::${nexusUrl}/repository/releases"
-      }
       */
 
       // Build the OpenShift Image in OpenShift and tag it.
@@ -97,31 +90,10 @@ podTemplate(
         sh "podman push --sign-by ${gpgId} ${imageTag}"
       }
 
-      stage('Push image signature to S3 bucket') {
-        echo "Syncing S3 bucket with the signatures"
-        sh "s3cmd sync /var/lib/containers/sigstore/ s3://signstore/"
-      }
-
-        /*
-      // Deploy the built image to the Development Environment.
-      stage('Deploy to Dev') {
-        echo "Deploying container image"
-        openshift.withCluster() {
-            openshift.withProject("${devProject}") {
-                openshift.set("image", "dc/${appName}", "${appName}=${ocpDockerRegistry}/${devProject}/${appName}:${devTag}")
-                openshift.set("env", "dc/${appName}", "VERSION='${devTag} (tasks-dev)'")
-                def dcDev = openshift.selector("dc","${appName}")
-                dcDev.rollout().latest()
-                def rcDevVersion = dcDev.object().status.latestVersion
-                def rcDev = openshift.selector("rc","${appName}-${rcDevVersion}").object()
-                echo "Waiting for DEV app to be ready"
-                while (rcDev.status.readyReplicas != rcDev.spec.replicas) {
-                    sleep 10
-                    rcDev = openshift.selector("rc", "${appName}-${rcDevVersion}").object()
-                }
-
-          }
-        }
+      /*
+      stage('Copy signstore to central location') {
+        echo "Syncing signstore"
+        sh "rsync..."
       }
       */
     }
